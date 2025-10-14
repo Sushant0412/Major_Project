@@ -59,13 +59,14 @@ def get_gemini_report(pil_image, keras_prediction):
 
     prompt_parts = [
         "You are an expert radiologist specializing in the interpretation of chest X-rays for diagnosing pneumonia. Your task is to analyze the provided chest X-ray image.",
-        f"The initial model predicted this case as: **{keras_prediction}**.",
-        "Please provide a detailed summary of your findings in a structured report, useful for a consulting physician.",
+        f"The initial deep learning model predicted this case as: **{keras_prediction}**.",
+        "Please provide a detailed summary of your findings in a structured report. This report should be useful for a consulting physician.",
         "Your analysis must:",
         "1. Confirm or contest the initial model's prediction.",
-        "2. Describe any visible radiological signs (e.g., opacities, consolidations). If none are present, state that clearly.",
-        "3. Clearly reference specific areas of the lung (e.g., 'in the right lower lobe').",
-        "4. Conclude with a final impression and recommendation.",
+        "2. Describe any visible radiological signs (e.g., opacities, consolidations, infiltrates, air bronchograms, pleural effusions). If none are present, state that clearly.",
+        "3. Clearly reference specific areas of the lung (e.g., 'in the right lower lobe', 'apical region').",
+        "4. Validate your statements by describing what you see in the image (or the lack of pathological findings).",
+        "5. Conclude with a final impression and recommendation.",
         "\n**Radiology Report**\n---",
         pil_image,
     ]
@@ -120,7 +121,7 @@ def predict():
     )
 
 
-def generate_formatted_report(pil_image, initial_report_html):
+def generate_formatted_report(initial_report_html):
     """
     Calls Gemini to generate a hospital-style HTML radiology report.
     """
@@ -262,46 +263,38 @@ def generate_formatted_report(pil_image, initial_report_html):
 </body>
 </html>""",
         "\n--- TEMPLATE END ---",
-        "\nHere is the provided chest X-ray image for reference:",
-        pil_image,
         "\nHere is the AI’s Initial Analysis text to reformat:",
         initial_report_text,
     ]
 
     try:
         response = gemini_model.generate_content(prompt)
-        print(response.text)
-        return response.text  # Full HTML output
+        # Save directly to templates/report.html
+        report_path = os.path.join("templates", "report.html")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(response.text)
+        print(f"✅ Formatted report saved to {report_path}")
+        return response.text
     except Exception as e:
-        return f"Could not generate formatted report. Error: {e}"
+        print(f"❌ Could not generate formatted report. Error: {e}")
 
 
 # ------------------------------------
 # Flask API endpoint for report output
 # ------------------------------------
 @app.route("/generate_report", methods=["POST"])
-def generate_report_route():
-    """
-    Receives base64 image + report HTML, and returns a formatted HTML report.
-    """
+def generate_report():
     try:
         data = request.get_json()
-        if not data or "image" not in data or "report_html" not in data:
-            return jsonify({"error": "Missing data"}), 400
+        report_html = data.get("report_html", "")
 
-        # Decode base64 image
-        image_bytes = base64.b64decode(data["image"])
-        pil_image = Image.open(io.BytesIO(image_bytes))
+        # Save Gemini-generated HTML directly to templates/report.html
+        generate_formatted_report(report_html)
 
-        # Generate formatted HTML report
-        formatted_report_html = generate_formatted_report(
-            pil_image, data["report_html"]
-        )
-
-        return jsonify({"formatted_report": formatted_report_html})
-
+        # Return only a success message; no HTML content
+        return jsonify({"message": "Formatted report generated successfully!"})
     except Exception as e:
-        return jsonify({"error": f"Server error: {e}"}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
