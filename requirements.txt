@@ -4,3 +4,7 @@ numpy
 Pillow
 google-generativeai
 python-dotenv
+markdown2
+beautifulsoup4
+shap
+matplotlib
