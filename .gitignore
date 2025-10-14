@@ -1,3 +1,4 @@
 __pycache__
 /venv
 /chest_xray_data
+.env
