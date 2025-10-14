@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analysis Results</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    />
+    <style>
+      :root {
+        --bg-color: #f7f9fb;
+        --card-bg: #ffffff;
+        --text-color: #1a1a1a;
+        --border-color: #e1e5e8;
+        --shadow-color: rgba(0, 0, 0, 0.05);
+        --primary-color: #3b82f6;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-color: #0f172a;
+          --card-bg: #1e293b;
+          --text-color: #e2e8f0;
+          --border-color: #334155;
+          --shadow-color: rgba(0, 0, 0, 0.4);
+        }
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-color);
+      }
+
+      main {
+        margin-top: 2rem;
+      }
+
+      nav strong {
+        color: var(--text-color);
+        font-size: 1.2rem;
+      }
+
+      .result-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        align-items: flex-start;
+      }
+
+      .image-section {
+        flex: 1 1 350px;
+        text-align: center;
+      }
+
+      .image-section img {
+        max-width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 10px var(--shadow-color);
+      }
+
+      .results-section {
+        flex: 2 1 500px;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      article {
+        background: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px var(--shadow-color);
+        border: 1px solid var(--border-color);
+      }
+
+      article header {
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      h2,
+      h3 {
+        margin: 0;
+      }
+
+      .keras-diagnosis h2 {
+        color: var(--primary-color);
+        font-weight: bold;
+      }
+
+      #reportContainer pre {
+        background-color: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 0.25rem;
+        padding: 1rem;
+        font-family: monospace;
+        white-space: pre-wrap;
+        margin-top: 1rem;
+        color: var(--text-color);
+      }
+
+      .back-btn {
+        margin-top: 2rem;
+        display: block;
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="container">
+      <nav>
+        <ul>
+          <li><strong>🩺 Analysis Results Dashboard</strong></li>
+        </ul>
+      </nav>
+
+      <div class="result-container">
+        <div class="image-section">
+          <h2>Uploaded Image</h2>
+          <img
+            src="data:image/jpeg;base64,{{ uploaded_image }}"
+            alt="Uploaded X-Ray"
+          />
+        </div>
+
+        <div class="results-section">
+          <article class="keras-diagnosis">
+            <header><h3>📈 Keras Model Diagnosis</h3></header>
+            <h2>{{ keras_result }}</h2>
+          </article>
+
+          <article>
+            <header><h3>🤖 AI Radiologist Analysis</h3></header>
+            <div id="initialAnalysis">{{ gemini_analysis | safe }}</div>
+          </article>
+
+          <!-- Section for the "Generate Report" button and its output -->
+          <article>
+            <header><h3>📄 Formal Report Generation</h3></header>
+            <p>
+              Click the button below to generate a structured report suitable
+              for official records, based on the AI analysis above.
+            </p>
+            <button id="generateReportBtn">Generate Formal Report</button>
+            <div id="reportContainer" style="margin-top: 1rem"></div>
+          </article>
+        </div>
+      </div>
+
+      <a href="/" role="button" class="secondary back-btn"
+        >Analyze Another Image</a
+      >
+    </main>
+
+    <!-- Import jsPDF library for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+      const imageData = {{ uploaded_image | tojson }};
+      const reportHtml = {{ gemini_analysis | tojson }};
+
+      const generateBtn = document.getElementById('generateReportBtn');
+      const reportContainer = document.getElementById('reportContainer');
+
+      generateBtn.addEventListener('click', async () => {
+        generateBtn.setAttribute('aria-busy', 'true');
+        generateBtn.textContent = 'Generating...';
+        generateBtn.disabled = true;
+        reportContainer.innerHTML = '';
+
+        try {
+          const response = await fetch('/generate_report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              image: imageData,
+              report_html: reportHtml,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Server error: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          displayReport(data.formatted_report);
+        } catch (error) {
+          reportContainer.innerHTML = `<p style="color: #f44336;"><strong>Error:</strong> ${error.message}</p>`;
+        } finally {
+          generateBtn.setAttribute('aria-busy', 'false');
+          generateBtn.textContent = 'Generate Formal Report';
+          generateBtn.disabled = false;
+        }
+      });
+
+      function displayReport(reportText) {
+        // Display formatted report text on the page inside a <pre> tag
+        const pre = document.createElement('pre');
+        pre.textContent = reportText;
+        reportContainer.appendChild(pre);
+
+        // Create a PDF download button
+        const downloadBtn = document.createElement('button');
+        downloadBtn.textContent = 'Download Report (.pdf)';
+        downloadBtn.className = 'outline';
+        downloadBtn.style.marginTop = '1rem';
+        downloadBtn.onclick = () => downloadAsPDF(reportText);
+
+        reportContainer.appendChild(downloadBtn);
+      }
+      
+      // --- NEW, ADVANCED PDF GENERATION FUNCTION ---
+      function downloadAsPDF(text) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+          orientation: 'p',
+          unit: 'pt',
+          format: 'a4',
+        });
+
+        // --- 1. PARSE THE REPORT TEXT ---
+        const lines = text.split('\n');
+        const reportData = {
+          details: {},
+          findings: [],
+          remarks: ''
+        };
+        let currentSection = 'details';
+
+        lines.forEach(line => {
+          if (line.includes(':')) {
+            const [key, ...valueParts] = line.split(':');
+            const value = valueParts.join(':').trim();
+            if (currentSection === 'details' && key.trim() !== 'FINDINGS' && key.trim() !== 'REMARKS') {
+              reportData.details[key.trim()] = value;
+            }
+          }
+          if (line.startsWith('FINDINGS')) {
+            currentSection = 'findings';
+          } else if (line.startsWith('REMARKS')) {
+            currentSection = 'remarks';
+          } else if (line.startsWith('- ')) {
+            if (currentSection === 'findings') {
+              reportData.findings.push(line.substring(2));
+            } else if (currentSection === 'remarks') {
+               reportData.remarks = line.substring(2);
+            }
+          }
+        });
+        
+        // --- 2. DRAW THE PDF DOCUMENT ---
+        const margin = 40;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        let y = 50;
+        
+        // Draw Header Table
+        const tableCol1_x = margin;
+        const tableCol2_x = 200;
+        const tableCol3_x = 320;
+        const tableCol4_x = 440;
+        const rowHeight = 20;
+
+        doc.setFontSize(10);
+        
+        const drawRow = (label1, value1, label2, value2) => {
+            doc.setFont('helvetica', 'bold');
+            doc.text(label1, tableCol1_x, y);
+            doc.text(label2, tableCol3_x, y);
+            doc.setFont('helvetica', 'normal');
+            doc.text(value1, tableCol2_x, y);
+            doc.text(value2, tableCol4_x, y);
+            y += rowHeight;
+        }
+
+        drawRow("Patient Name:", reportData.details["Patient Name"] || '', "Study Date:", reportData.details["Study Date"] || '');
+        drawRow("Referring Doctor:", reportData.details["Referring Doctor"] || '', "Age:", reportData.details["Age"] || '');
+        drawRow("Sex:", reportData.details["Sex"] || '', "UHID:", reportData.details["UHID"] || '');
+        
+        // Draw table borders
+        doc.setLineWidth(1.5);
+        doc.rect(margin - 5, 35, pageWidth - (margin * 2) + 10, y - 40);
+        
+        y += 20; // Space after table
+
+        // Draw CHEST Title
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        const title = 'CHEST';
+        const titleWidth = doc.getTextWidth(title);
+        doc.text(title, (pageWidth - titleWidth) / 2, y);
+        doc.setLineWidth(1);
+        doc.line((pageWidth - titleWidth) / 2, y + 2, (pageWidth + titleWidth) / 2, y + 2);
+        y += 30;
+        
+        // Draw Findings and Remarks
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        if(reportData.findings.length > 0) {
+            doc.text('FINDINGS:', margin, y);
+            y += rowHeight;
+            doc.setFont('helvetica', 'normal');
+            reportData.findings.forEach(finding => {
+                const findingLines = doc.splitTextToSize(`- ${finding}`, pageWidth - margin * 2 - 10);
+                doc.text(findingLines, margin + 10, y);
+                y += (findingLines.length * 12) + 5;
+            });
+        }
+        
+        y += 10;
+        
+        if (reportData.remarks) {
+            doc.setFont('helvetica', 'bold');
+            doc.text('REMARKS:', margin, y);
+            y += rowHeight;
+            doc.setFont('helvetica', 'normal');
+            const remarkLines = doc.splitTextToSize(`- ${reportData.remarks}`, pageWidth - margin * 2);
+            doc.text(remarkLines, margin + 10, y);
+        }
+
+        // --- 3. SAVE THE DOCUMENT ---
+        doc.save('radiology_report.pdf');
+      }
+    </script>
+  </body>
+</html>
+

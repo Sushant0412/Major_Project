@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pneumonia Detector</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    />
+  </head>
+  <body>
+    <main class="container">
+      <nav>
+        <ul>
+          <li><strong>Chest X-Ray Pneumonia Detector 🩺</strong></li>
+        </ul>
+      </nav>
+      <article>
+        <header>
+          <h2>Upload an X-Ray Image</h2>
+        </header>
+        <form action="/predict" method="post" enctype="multipart/form-data">
+          <label for="file">
+            Choose an image file
+            <input type="file" id="file" name="file" required />
+          </label>
+          <button type="submit">Analyze Image</button>
+        </form>
+      </article>
+    </main>
+  </body>
+</html>
