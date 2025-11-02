@@ -108,6 +108,13 @@
         </ul>
       </nav>
 
+      <input type="hidden" id="patient-name" value="{{ patient_name }}" />
+      <input type="hidden" id="study-date" value="{{ study_date }}" />
+      <input type="hidden" id="patient-sex" value="{{ patient_sex }}" />
+      <input type="hidden" id="ipd-no" value="{{ ipd_no }}" />
+      <input type="hidden" id="dept-no" value="{{ dept_no }}" />
+      <input type="hidden" id="image-data" value="{{ uploaded_image }}" />
+
       <div class="result-container">
         <div class="image-section">
           <h2>Uploaded Image</h2>
@@ -127,8 +134,7 @@
             <header><h3>AI Radiologist Analysis</h3></header>
             <div id="initialAnalysis">{{ gemini_analysis | safe }}</div>
           </article>
-
-          <!-- Section for the "Generate Report" button and its output -->
+          {% if is_valid_image %}
           <article>
             <header><h3>Formal Report Generation</h3></header>
             <p>
@@ -136,9 +142,9 @@
               for official records, based on the AI analysis above.
             </p>
             <button id="generateReportBtn">Generate Formal Report</button>
-            <!-- This container will hold the new download button -->
             <div id="reportActionsContainer" style="margin-top: 1rem"></div>
           </article>
+          {% endif %}
         </div>
       </div>
 
@@ -148,48 +154,123 @@
     </main>
 
     <script>
-      const generateBtn = document.getElementById('generateReportBtn');
-      const reportActionsContainer = document.getElementById('reportActionsContainer');
+      document.addEventListener("DOMContentLoaded", () => {
+        // --- SHAP Explainer Button Logic ---
+        const explainBtn = document.getElementById("explain-btn");
+        const shapContainer = document.getElementById("shap-image-container");
 
-      generateBtn.addEventListener('click', async () => {
-          generateBtn.disabled = true;
-          generateBtn.setAttribute('aria-busy', 'true');
-          generateBtn.textContent = 'Generating...';
-          // Clear any previous buttons or messages
-          reportActionsContainer.innerHTML = '';
+        if (explainBtn && shapContainer) {
+          explainBtn.addEventListener("click", async () => {
+            explainBtn.setAttribute("aria-busy", "true");
+            explainBtn.disabled = true;
+            shapContainer.innerHTML = "<p>Loading explanation...</p>";
 
-          try {
-              const response = await fetch('/generate_report', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ report_html: {{ gemini_analysis | tojson }} })
+            // Get image data from hidden field
+            const imageData = document.getElementById("image-data").value;
+
+            try {
+              const response = await fetch("/explain", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: imageData }),
               });
 
               if (!response.ok) {
-                  const errorData = await response.json();
-                  throw new Error(errorData.error || 'Server error');
+                const errorData = await response.json();
+                throw new Error(
+                  errorData.error || "Failed to get explanation."
+                );
               }
 
-              // On success, create and display the download button
-              const successMsg = document.createElement('p');
-              successMsg.innerHTML = "<strong>Success!</strong> Your report is ready.";
+              const data = await response.json();
+              // Display the SHAP image
+              shapContainer.innerHTML = `<img src="${data.explanation_image}" alt="SHAP explanation" style="max-width: 100%; border-radius: 8px;" />`;
+              explainBtn.remove(); // Remove button after success
+            } catch (error) {
+              shapContainer.innerHTML = `<p style="color: #f44336;"><strong>Error:</strong> ${error.message}</p>`;
+              explainBtn.disabled = false;
+              explainBtn.setAttribute("aria-busy", "false");
+            }
+          });
+        }
+
+        // --- Generate Report Button Logic ---
+        const generateBtn = document.getElementById("generateReportBtn");
+        const reportActionsContainer = document.getElementById(
+          "reportActionsContainer"
+        );
+
+        if (generateBtn && reportActionsContainer) {
+          generateBtn.addEventListener("click", async () => {
+            generateBtn.disabled = true;
+            generateBtn.setAttribute("aria-busy", "true");
+            generateBtn.textContent = "Generating...";
+            reportActionsContainer.innerHTML = ""; // Clear previous actions
+
+            // 1. Get Gemini's analysis text
+            const reportHtml =
+              document.getElementById("initialAnalysis").innerHTML;
+
+            // 2. Get ALL patient data from the hidden fields
+            const patientData = {
+              report_html: reportHtml,
+              patient_name: document.getElementById("patient-name").value,
+              study_date: document.getElementById("study-date").value,
+              patient_sex: document.getElementById("patient-sex").value,
+              ipd_no: document.getElementById("ipd-no").value,
+              dept_no: document.getElementById("dept-no").value,
+            };
+
+            try {
+              // 3. Send ALL data to the endpoint
+              const response = await fetch("/generate_report", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patientData), // Use the object with all data
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Server error");
+              }
+
+              const data = await response.json(); // Get success data
+
+              // On success, create success message and buttons
+              const successMsg = document.createElement("p");
+              successMsg.innerHTML =
+                "<strong>Success!</strong> Your report is ready.";
               reportActionsContainer.appendChild(successMsg);
 
-              const downloadBtn = document.createElement('a');
-              downloadBtn.href = '/download_report';
-              downloadBtn.download = 'report.html';
-              downloadBtn.textContent = 'Download Report';
-              downloadBtn.className = 'button'; // Style as a primary button
-              downloadBtn.role = 'button';
+              // View Button
+              const viewBtn = document.createElement("a");
+              viewBtn.href = data.report_url; // Use URL from response
+              viewBtn.textContent = "View Report";
+              viewBtn.className = "button secondary"; // Style as secondary
+              viewBtn.role = "button";
+              viewBtn.target = "_blank"; // Open in new tab
+              viewBtn.style.marginRight = "0.5rem";
+              reportActionsContainer.appendChild(viewBtn);
+
+              // Download Button
+              const downloadBtn = document.createElement("a");
+              downloadBtn.href = data.download_url; // Use URL from response
+              downloadBtn.download = "report.html";
+              downloadBtn.textContent = "Download Report";
+              downloadBtn.className = "button"; // Style as primary
+              downloadBtn.role = "button";
               reportActionsContainer.appendChild(downloadBtn);
 
-          } catch (err) {
+              generateBtn.remove(); // Remove the generate button
+            } catch (err) {
               reportActionsContainer.innerHTML = `<p style="color: #f44336;"><strong>Error generating report:</strong> ${err.message}</p>`;
-          } finally {
+              // Re-enable button on error
               generateBtn.disabled = false;
-              generateBtn.setAttribute('aria-busy', 'false');
-              generateBtn.textContent = 'Generate Formal Report';
-          }
+              generateBtn.setAttribute("aria-busy", "false");
+              generateBtn.textContent = "Generate Formal Report";
+            }
+          });
+        }
       });
     </script>
   </body>

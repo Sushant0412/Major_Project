@@ -18,13 +18,43 @@
       </nav>
       <article>
         <header>
-          <h2>Upload an X-Ray Image</h2>
+          <h2>Upload Patient Details & X-Ray</h2>
         </header>
+
         <form action="/predict" method="post" enctype="multipart/form-data">
+          <label for="name">
+            Patient Name
+            <input
+              type="text"
+              id="name"
+              name="name"
+              placeholder="Enter patient's full name"
+              required
+            />
+          </label>
+
+          <div class="grid">
+            <label for="date">
+              Date of Birth
+              <input type="date" id="date" name="date" required />
+            </label>
+
+            <label for="sex">
+              Sex
+              <select id="sex" name="sex" required>
+                <option value="" disabled selected>Select...</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+          </div>
+
           <label for="file">
-            Choose an image file
+            Choose an X-Ray image
             <input type="file" id="file" name="file" required />
           </label>
+
           <button type="submit">Analyze Image</button>
         </form>
       </article>
